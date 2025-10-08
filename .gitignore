@@ -1,14 +1,30 @@
-﻿__pycache__/
-*.pyc
+﻿# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment folders
 .venv/
+venv/
+env/
+
+# Environment files
 .env
 .env.*
-/data/*
-/app/db/*.db
-.DS_Store
 
-# Dev/debug artifacts
-server.log
-auth_url.txt
-raw_headers.txt
-uvicorn.pid
+# Build / distribution
+dist/
+build/
+*.egg-info/
+
+# IDE / editor settings
+.vscode/
+.idea/
+
+# Database / local data
+*.db
+*.sqlite3
+
+# OS files
+.DS_Store
+Thumbs.db
