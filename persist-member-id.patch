@@ -1,0 +1,190 @@
+*** Begin Patch
+*** Update File: app/db/models.py
+@@
+-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, func
++from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, func
+ from .database import Base
+ 
+ class User(Base):
+     __tablename__ = "users"
+     id = Column(Integer, primary_key=True, index=True)
+-    email = Column(String(320), unique=True, nullable=True)
++    email = Column(String(320), unique=True, nullable=True)
++    # NEW: cache the LinkedIn member id for posting without calling /me each time
++    member_id = Column(String(64), nullable=True, index=True)
+     created_at = Column(DateTime(timezone=True), server_default=func.now())
+ 
+ class LinkedInToken(Base):
+     __tablename__ = "linkedin_tokens"
+     id = Column(Integer, primary_key=True, index=True)
+*** End Patch
+
+*** Begin Patch
+*** Update File: app/routers/auth_linkedin.py
+@@
+ from app.db import crud_tokens
++from app.db import models
+ 
+@@
+     token_resp = linkedin_api.exchange_code_for_token(code)
+     access_token = token_resp.get("access_token")
+     expires_in = token_resp.get("expires_in", 3600)
+     id_token = token_resp.get("id_token")  # present because we requested 'openid'
+@@
+-    # Create local user + store encrypted access token
+-    user = crud_tokens.upsert_user(db, email=None)
+-    crud_tokens.save_linkedin_token(db, user.id, access_token, expires_in)
+-
+-    # If using OpenID, pull the member id from the id_token's 'sub'
+-    member_id = linkedin_api.extract_sub_from_id_token(id_token) if id_token else None
+-    if member_id:
+-        print("LinkedIn member_id (sub):", member_id, flush=True)
++    # Create local user + store encrypted access token
++    user = crud_tokens.upsert_user(db, email=None)
++    crud_tokens.save_linkedin_token(db, user.id, access_token, expires_in)
++
++    # If using OpenID, pull the member id from the id_token's 'sub' and persist it
++    member_id = linkedin_api.extract_sub_from_id_token(id_token) if id_token else None
++    if member_id:
++        print("LinkedIn member_id (sub):", member_id, flush=True)
++        # Save to user if changed/new
++        if getattr(user, "member_id", None) != member_id:
++            user.member_id = member_id
++            db.add(user)
++            db.commit()
++            db.refresh(user)
+ 
+     return {
+         "status": "ok",
+         "user_id": user.id,
+         "expires_in": expires_in,
+*** End Patch
+
+*** Begin Patch
+*** Update File: app/routers/linkedin_publish.py
+@@
+-from fastapi import APIRouter, Depends, HTTPException
+-from pydantic import BaseModel
+-from typing import Dict, Any
++from fastapi import APIRouter, Depends, HTTPException
++from pydantic import BaseModel
++from typing import Dict, Any, Optional
+ from sqlalchemy.orm import Session
+ from app.deps import get_db
+-from app.db import crud_tokens
++from app.db import crud_tokens, models
+ from app.db.token_crypto import decrypt_token
+ from app.services import linkedin_api
+ 
+ router = APIRouter(prefix="/linkedin", tags=["linkedin"])
+ 
+ class PublishIn(BaseModel):
+-    user_id: int
+-    text: str
++    user_id: int
++    text: str
++    member_id: Optional[str] = None  # now optional
+ 
+ @router.post("/post")
+ def publish(body: PublishIn, db: Session = Depends(get_db)) -> Dict[str, Any]:
+     tok = crud_tokens.get_latest_token(db, user_id=body.user_id)
+     if not tok:
+         raise HTTPException(400, "No LinkedIn token on file for this user_id. Visit /auth/linkedin/login first.")
+     access_token = decrypt_token(tok.access_token_encrypted)
+-    member_id = linkedin_api.get_member_urn(access_token)
+-    ok, ref = linkedin_api.post_text(access_token, member_id, body.text)
++
++    # Resolve member_id: prefer input, else cached on user, else fallback to /me
++    member_id = body.member_id
++    if not member_id:
++        user = db.query(models.User).filter(models.User.id == body.user_id).first()
++        if user and user.member_id:
++            member_id = user.member_id
++    if not member_id:
++        mid = linkedin_api.get_member_id_from_me(access_token)
++        if not mid:
++            raise HTTPException(400, "Could not resolve member_id; ensure login completed and member_id is saved.")
++        member_id = mid
++        # cache it on the user for next time
++        user = db.query(models.User).filter(models.User.id == body.user_id).first()
++        if user:
++            user.member_id = member_id
++            db.add(user); db.commit(); db.refresh(user)
++
++    author_urn = f"urn:li:member:{member_id}"
++    ok, ref = linkedin_api.post_text(access_token, author_urn, body.text)
+     if ok:
+         return {"status": "posted", "ref": ref}
+     raise HTTPException(400, f"LinkedIn API error: {ref}")
+*** End Patch
+
+*** Begin Patch
+*** Update File: app/services/linkedin_api.py
+@@
+-from typing import Tuple, Dict, Any
++from typing import Tuple, Dict, Any
+ from urllib.parse import urlencode, quote
+ from app.config import settings
++import base64, json
+ 
+ AUTH_URL  = "https://www.linkedin.com/oauth/v2/authorization"
+ TOKEN_URL = "https://www.linkedin.com/oauth/v2/accessToken"
++ME_URL    = "https://api.linkedin.com/v2/me"
+ UGC_URL   = "https://api.linkedin.com/v2/ugcPosts"
+ 
+ def auth_url(state: str) -> str:
+@@
+     with httpx.Client(timeout=60) as c:
+         r = c.post(TOKEN_URL, data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
+         r.raise_for_status()
+         return r.json()
+ 
++def get_member_id_from_me(access_token: str) -> str:
++    try:
++        with httpx.Client(timeout=60) as c:
++            r = c.get(ME_URL, headers={"Authorization": f"Bearer {access_token}"})
++            if r.status_code // 100 != 2:
++                return ""
++            data = r.json()
++            return data.get("id", "") or ""
++    except Exception:
++        return ""
++
++def extract_sub_from_id_token(id_token: str) -> str:
++    try:
++        parts = id_token.split(".")
++        if len(parts) < 2:
++            return ""
++        payload = parts[1]
++        pad = "=" * (-len(payload) % 4)
++        data = base64.urlsafe_b64decode(payload + pad)
++        claims = json.loads(data)
++        return claims.get("sub", "")
++    except Exception:
++        return ""
++
+ def post_text(access_token: str, author_urn: str, text: str) -> Tuple[bool, str]:
+@@
+         if 200 <= r.status_code < 300:
+             return True, r.text
+         return False, r.text
+*** End Patch
+
+*** Begin Patch
+*** Add File: scripts/add_member_id_column.py
++import sqlite3, os
++
++root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++db_path = os.path.join(root, "app.db")
++
++conn = sqlite3.connect(db_path)
++cur = conn.cursor()
++cur.execute("PRAGMA table_info(users)")
++cols = [r[1] for r in cur.fetchall()]
++if "member_id" not in cols:
++    cur.execute("ALTER TABLE users ADD COLUMN member_id TEXT")
++    conn.commit()
++conn.close()
++print("OK")
++
+*** End Patch

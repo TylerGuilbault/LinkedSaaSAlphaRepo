@@ -1,0 +1,14 @@
+﻿__pycache__/
+*.pyc
+.venv/
+.env
+.env.*
+/data/*
+/app/db/*.db
+.DS_Store
+
+# Dev/debug artifacts
+server.log
+auth_url.txt
+raw_headers.txt
+uvicorn.pid
