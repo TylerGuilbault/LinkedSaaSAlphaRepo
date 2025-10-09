@@ -20,6 +20,10 @@ def _startup():
 def root():
     return {"message": "LinkedIn SaaS API is running!"}
 
+@app.get("/health")
+def health():
+    return {"ok": True}
+
 # Mount routes
 app.include_router(generate.router)           # /rss/*
 app.include_router(content.router)            # /generate/*
