@@ -1,4 +1,6 @@
-﻿from fastapi import FastAPI
+import os
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI
 from app.deps import init_db
 
 # Routers
@@ -8,6 +10,17 @@ from app.routers import thoughtpost
 
 
 app = FastAPI(title="LinkedIn SaaS API", version="0.5.0")
+
+raw = os.getenv("ALLOWED_ORIGINS", "*")
+allowed_origins = ["*"] if raw.strip() == "*" else [o.strip() for o in raw.split(",") if o.strip()]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=False,   # keep False when using "*"
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 print("MOUNTING ROUTERS… main.py at runtime is:", __file__)
 
