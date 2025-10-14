@@ -146,7 +146,7 @@ def _build_prompt(
      # Emoji hint
     emoji_hint = ""
     if use_emojis:
-        emoji_hint = "Use exactly 3 tasteful emojis, one in each bullet or at end of bullets
+        emoji_hint = "Use exactly 3 tasteful emojis, one in each bullet or at end of bullets."
 
     prompt = f"""
 You are a seasoned LinkedIn thought leader. Write a natural, engaging post for professionals based on the ARTICLE below.
