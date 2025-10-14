@@ -39,12 +39,12 @@ class ThoughtPostResponse(BaseModel):
 class ThoughtPostRequest(BaseModel):
     text: str = Field(..., min_length=1)
     tone: str = Field(default="professional")
-    angle: Optional[str] = Field(default=None, ...)
+    angle: Optional[str] = Field(default=None)   # removed invalid "..."
     max_words: int = Field(default=230, ge=80, le=300)
     source_title: Optional[str] = None
     source_link: Optional[str] = None
 
-    use_emojis: bool = Field(default=False, description="If true, include exactly 3 emojis in the post")
+    use_emojis: bool = Field(default=False, description="If true, include 3 emojis in the post")
 
 # --- add this helper near the top of the file (e.g., under imports) ---
 def _fix_mojibake_roundtrip(s: str) -> str:
