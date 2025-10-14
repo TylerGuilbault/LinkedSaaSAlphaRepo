@@ -131,8 +131,9 @@ def _build_prompt(
     max_words: int,
     source_title: Optional[str],
     source_link: Optional[str],
+    use_emojis: bool
 ) -> str:
-    angle_key = (angle or "").strip().lower()
+        angle_key = (angle or "").strip().lower()
     angle_hint = {
         "career":     "Translate to skills and compounding learning.",
         "leadership": "Prioritization, communication, and explicit tradeoffs.",
@@ -143,10 +144,10 @@ def _build_prompt(
 
     src_title = (source_title or "").strip()
 
-     # Emoji hint
+    # Emoji hint
     emoji_hint = ""
     if use_emojis:
-        emoji_hint = "Use exactly 3 tasteful emojis, one in each bullet or at end of bullets."
+        emoji_hint = "Include exactly 3 tasteful emojis: one in each bullet + one elsewhere naturally."
 
     prompt = f"""
 You are a seasoned LinkedIn thought leader. Write a natural, engaging post for professionals based on the ARTICLE below.
@@ -157,8 +158,8 @@ ARTICLE:
 
 Write it like a human:
 - Use short paragraphs with blank lines between them (no walls of text).
-- Use 3 Emojis if use_emojis is true.
-- Use exactly 2 Bullets (•).
+- {emoji_hint}
+- Use exactly 2 bullet points (•).
 - End with one reflective question on its own line.
 - Add 1–4 tasteful hashtags at the end (#Leadership etc.), not “hashtag#”.
 - Do NOT include any URLs (the system attaches the link preview).
