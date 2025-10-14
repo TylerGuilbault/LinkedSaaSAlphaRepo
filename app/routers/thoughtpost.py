@@ -133,7 +133,7 @@ def _build_prompt(
     source_link: Optional[str],
     use_emojis: bool
 ) -> str:
-        angle_key = (angle or "").strip().lower()
+    angle_key = (angle or "").strip().lower()
     angle_hint = {
         "career":     "Translate to skills and compounding learning.",
         "leadership": "Prioritization, communication, and explicit tradeoffs.",
