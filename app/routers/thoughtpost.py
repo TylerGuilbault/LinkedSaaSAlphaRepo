@@ -36,6 +36,16 @@ class ThoughtPostRequest(BaseModel):
 class ThoughtPostResponse(BaseModel):
     draft: str
 
+class ThoughtPostRequest(BaseModel):
+    text: str = Field(..., min_length=1)
+    tone: str = Field(default="professional")
+    angle: Optional[str] = Field(default=None, ...)
+    max_words: int = Field(default=230, ge=80, le=300)
+    source_title: Optional[str] = None
+    source_link: Optional[str] = None
+
+    use_emojis: bool = Field(default=False, description="If true, include exactly 3 emojis in the post")
+
 # --- add this helper near the top of the file (e.g., under imports) ---
 def _fix_mojibake_roundtrip(s: str) -> str:
     """
@@ -133,6 +143,11 @@ def _build_prompt(
 
     src_title = (source_title or "").strip()
 
+     # Emoji hint
+    emoji_hint = ""
+    if use_emojis:
+        emoji_hint = "Use exactly 3 tasteful emojis, one in each bullet or at end of bullets
+
     prompt = f"""
 You are a seasoned LinkedIn thought leader. Write a natural, engaging post for professionals based on the ARTICLE below.
 
@@ -142,8 +157,8 @@ ARTICLE:
 
 Write it like a human:
 - Use short paragraphs with blank lines between them (no walls of text).
-- Emojis are optional (0–3), use only if they feel natural.
-- Bullets (•) are optional—use only if they help clarity.
+- Use 3 Emojis if use_emojis is true.
+- Use exactly 2 Bullets (•).
 - End with one reflective question on its own line.
 - Add 1–4 tasteful hashtags at the end (#Leadership etc.), not “hashtag#”.
 - Do NOT include any URLs (the system attaches the link preview).
@@ -467,14 +482,20 @@ async def generate_thoughtpost(req: ThoughtPostRequest) -> Dict[str, str]:
         else:
             headline = head or (title or "Quick update")
 
+        # Decide emojis inclusion
+        if r.use_emojis:
+            e = ["✅", "🤔", "✨"]  # example set of 3 emojis
+        else:
+            e = ["", "", ""]
+
+    # Exactly 2 bullet lines
         body_lines = [
             headline,
             "",
-            "• ✅ What changed: Summarize the impact and scope so priorities don’t drift.",
-            "• Impact: Clarify who’s affected and which KPIs or deadlines move.",
-            "• Next step: Write the tradeoffs (timeline, resources, risk) and share the decision in one place.",
+            f"• {e[0]} What changed / summary: {summary}",
+            f"• {e[1]} Impact & next step: explain how this matters",
             "",
-            "What’s the first tradeoff you’ll make to keep focus? 🤔"
+            f"Reflect: {e[2]} What do you think about this change?"
         ]
         return "\n".join(body_lines).strip()
 
@@ -486,6 +507,7 @@ async def generate_thoughtpost(req: ThoughtPostRequest) -> Dict[str, str]:
             max_words=req.max_words,
             source_title=req.source_title,
             source_link=req.source_link,
+            use_emojis=req.use_emojis,
         )
 
         raw = ""
