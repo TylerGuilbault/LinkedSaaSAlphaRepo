@@ -163,7 +163,7 @@ Write it like a human:
 - End with one reflective question on its own line.
 - Add 1–4 tasteful hashtags at the end (#Leadership etc.), not “hashtag#”.
 - Do NOT include any URLs (the system attaches the link preview).
-- Get close to {max_words} words.
+- Stay under {max_words} words: try to use as close to that as possible without going over.
 - Tone: {tone}. Angle: {angle_key or "general"} — {angle_hint}
 
 Return only the post body exactly as it should appear.
@@ -173,17 +173,18 @@ Return only the post body exactly as it should appear.
 
 # ---------- OpenAI primary ----------
 async def _call_openai(prompt: str) -> str:
+    max_tokens = int(req.max_words * 1.5)  # allow some buffer (words → tokens roughly 1:1.3)
     resp = await oai_client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
             {"role": "system", "content": "You are a professional LinkedIn content strategist."},
             {"role": "user", "content": prompt},
         ],
-        temperature=0.3,
-        max_tokens=1000,  # was 300 — allow longer outputs
+        temperature=0.4,
+        max_tokens=max_tokens,  # was 300 — allow longer outputs
     )
     return (resp.choices[0].message.content or "").strip()
-
+    
 
 # ---------- HF fallback ----------
 async def _hf_generate_one(model: str, prompt: str) -> str:
