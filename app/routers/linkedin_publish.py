@@ -1,4 +1,4 @@
-﻿# app/routers/linkedin_publish.py
+# app/routers/linkedin_publish.py
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional
@@ -12,6 +12,11 @@ import anyio
 import re
 import html
 
+# --- ADDED: imports/env + Request for session-aware posting (gated) ---
+import os
+from fastapi import Request
+ENABLE_OAUTH_LOGIN = os.getenv("ENABLE_OAUTH_LOGIN", "false").lower() == "true"
+# ---------------------------------------------------------------------
 
 router = APIRouter(prefix="/linkedin", tags=["linkedin"])
 
@@ -186,10 +191,35 @@ def _get_fresh_access_token(db: Session, user_id: int) -> str:
 
     return token_crypto.decrypt_token(tok.access_token_encrypted)
 
+# --- ADDED: helper to resolve user_id via session when flag ON (fallback to body.user_id) ---
+def _resolve_user_id_from_session_or_body(request: Optional[Request], fallback_user_id: int) -> int:
+    """
+    If ENABLE_OAUTH_LOGIN is true and a session user_id exists, prefer it.
+    Otherwise, use the original body.user_id to preserve current behavior.
+    """
+    if ENABLE_OAUTH_LOGIN and request is not None:
+        try:
+            sess_uid = request.session.get("user_id")
+            if sess_uid is not None:
+                # coerce to int safely; if it fails, fall back
+                return int(sess_uid)
+        except Exception:
+            pass
+    return fallback_user_id
+# -------------------------------------------------------------------------------------------
+
 @router.post("/post")
-def publish(body: PublishIn, db: Session = Depends(get_db)) -> Dict[str, Any]:
-    access_token = _get_fresh_access_token(db, body.user_id)
-    author_urn = _resolve_author_from_token(db, body.user_id, access_token, provided_member_id=None, context="post")
+def publish(
+    body: PublishIn,
+    db: Session = Depends(get_db),
+    # --- ADDED: accept Request for session lookup (non-breaking) ---
+    request: Request = None
+) -> Dict[str, Any]:
+    # --- NEW: prefer session user when flag ON; else keep existing behavior ---
+    effective_user_id = _resolve_user_id_from_session_or_body(request, body.user_id)
+
+    access_token = _get_fresh_access_token(db, effective_user_id)
+    author_urn = _resolve_author_from_token(db, effective_user_id, access_token, provided_member_id=None, context="post")
 
     safe_text = _final_text_clean(body.text)
 
@@ -263,9 +293,17 @@ def check(user_id: int, db: Session = Depends(get_db)) -> Dict[str, Any]:
     }
 
 @router.post("/post/link")
-def post_link(body: LinkShareIn, db: Session = Depends(get_db)) -> Dict[str, Any]:
-    access_token = _get_fresh_access_token(db, body.user_id)
-    author_urn = _resolve_author_from_token(db, body.user_id, access_token, body.member_id, context="post_link")
+def post_link(
+    body: LinkShareIn,
+    db: Session = Depends(get_db),
+    # --- ADDED: accept Request for session lookup (non-breaking) ---
+    request: Request = None
+) -> Dict[str, Any]:
+    # --- NEW: prefer session user when flag ON; else keep existing behavior ---
+    effective_user_id = _resolve_user_id_from_session_or_body(request, body.user_id)
+
+    access_token = _get_fresh_access_token(db, effective_user_id)
+    author_urn = _resolve_author_from_token(db, effective_user_id, access_token, body.member_id, context="post_link")
 
     safe_text = _final_text_clean(body.text)
 
@@ -275,10 +313,18 @@ def post_link(body: LinkShareIn, db: Session = Depends(get_db)) -> Dict[str, Any
     raise HTTPException(502, f"LinkedIn article share failed: {resp.text}")
 
 @router.post("/post/image")
-def post_image(body: ImageShareIn, db: Session = Depends(get_db)) -> Dict[str, Any]:
+def post_image(
+    body: ImageShareIn,
+    db: Session = Depends(get_db),
+    # --- ADDED: accept Request for session lookup (non-breaking) ---
+    request: Request = None
+) -> Dict[str, Any]:
     import base64, httpx
-    access_token = _get_fresh_access_token(db, body.user_id)
-    author_urn = _resolve_author_from_token(db, body.user_id, access_token, body.member_id, context="post_image")
+    # --- NEW: prefer session user when flag ON; else keep existing behavior ---
+    effective_user_id = _resolve_user_id_from_session_or_body(request, body.user_id)
+
+    access_token = _get_fresh_access_token(db, effective_user_id)
+    author_urn = _resolve_author_from_token(db, effective_user_id, access_token, body.member_id, context="post_image")
 
     safe_text = _final_text_clean(body.text)
 
