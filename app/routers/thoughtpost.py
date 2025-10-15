@@ -467,11 +467,9 @@ async def generate_thoughtpost(req: ThoughtPostRequest) -> Dict[str, str]:
     def _first_sentence(s: str, limit: int = 240) -> str:
         if not s:
             return ""
-        # strip URLs, HTML entities -> unicode, collapse spaces
         s = _re.sub(r'https?://\S+', '', s)
         s = _html.unescape(s)
         s = _re.sub(r'\s+', ' ', s).strip()
-        # take first sentence-ish
         parts = _re.split(r'(?<=[.!?])\s+', s)
         head = (parts[0] if parts else s).strip()
         if len(head) > limit:
@@ -487,13 +485,11 @@ async def generate_thoughtpost(req: ThoughtPostRequest) -> Dict[str, str]:
         else:
             headline = head or (title or "Quick update")
 
-        # Decide emojis inclusion
         if r.use_emojis:
-            e = ["✅", "🤔", "✨"]  # example set of 3 emojis
+            e = ["✅", "🤔", "✨"]
         else:
             e = ["", "", ""]
 
-    # Exactly 2 bullet lines
         body_lines = [
             headline,
             "",
@@ -518,19 +514,28 @@ async def generate_thoughtpost(req: ThoughtPostRequest) -> Dict[str, str]:
         raw = ""
         try:
             raw = await _call_openai(prompt)
+            # Debug log: raw output from model
+            print("[DEBUG] raw output:", raw, flush=True)
         except Exception as e:
             print(f"[openai.error] {e}", flush=True)
             try:
                 raw = await _hf_generate(REWRITER_MODELS, prompt)
+                print("[DEBUG] hf fallback raw output:", raw, flush=True)
             except Exception as e2:
                 print(f"[hf.error] {e2}", flush=True)
                 raw = ""
 
         cleaned = _cleanup(raw, req)
+        # Debug log: after cleanup
+        print("[DEBUG] cleaned after _cleanup:", cleaned, flush=True)
+
         cleaned = _re.sub(r'https?://\S+', '', cleaned or "").strip()
+        # Debug log: after URL strip
+        print("[DEBUG] cleaned after URL strip:", cleaned, flush=True)
 
         if not cleaned:
             cleaned = _fallback_from_req(req)
+            print("[DEBUG] fallback used, fallback text:", cleaned, flush=True)
 
         return {"draft": cleaned}
 
@@ -538,31 +543,7 @@ async def generate_thoughtpost(req: ThoughtPostRequest) -> Dict[str, str]:
         print(f"[thoughtpost.fatal] {e}", flush=True)
         return {"draft": _fallback_from_req(req)}
 
+
 @router.get("/thoughtpost/ping")
 async def thoughtpost_ping():
     return {"ok": True}
-
-raw = ""
-try:
-    raw = await _call_openai(prompt)
-    print("[DEBUG] raw output:", raw, flush=True)
-except Exception as e:
-    print(f"[openai.error] {e}", flush=True)
-    try:
-        raw = await _hf_generate(REWRITER_MODELS, prompt)
-        print("[DEBUG] hf fallback raw output:", raw, flush=True)
-    except Exception as e2:
-        print(f"[hf.error] {e2}", flush=True)
-        raw = ""
-
-cleaned = _cleanup(raw, req)
-print("[DEBUG] cleaned after _cleanup:", cleaned, flush=True)
-
-cleaned = _re.sub(r'https?://\S+', '', cleaned or "").strip()
-print("[DEBUG] cleaned after URL strip:", cleaned, flush=True)
-
-if not cleaned:
-    cleaned = _fallback_from_req(req)
-    print("[DEBUG] used fallback, fallback text:", cleaned, flush=True)
-
-return {"draft": cleaned}
