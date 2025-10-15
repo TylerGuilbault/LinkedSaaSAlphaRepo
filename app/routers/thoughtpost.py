@@ -541,3 +541,28 @@ async def generate_thoughtpost(req: ThoughtPostRequest) -> Dict[str, str]:
 @router.get("/thoughtpost/ping")
 async def thoughtpost_ping():
     return {"ok": True}
+
+raw = ""
+try:
+    raw = await _call_openai(prompt)
+    print("[DEBUG] raw output:", raw, flush=True)
+except Exception as e:
+    print(f"[openai.error] {e}", flush=True)
+    try:
+        raw = await _hf_generate(REWRITER_MODELS, prompt)
+        print("[DEBUG] hf fallback raw output:", raw, flush=True)
+    except Exception as e2:
+        print(f"[hf.error] {e2}", flush=True)
+        raw = ""
+
+cleaned = _cleanup(raw, req)
+print("[DEBUG] cleaned after _cleanup:", cleaned, flush=True)
+
+cleaned = _re.sub(r'https?://\S+', '', cleaned or "").strip()
+print("[DEBUG] cleaned after URL strip:", cleaned, flush=True)
+
+if not cleaned:
+    cleaned = _fallback_from_req(req)
+    print("[DEBUG] used fallback, fallback text:", cleaned, flush=True)
+
+return {"draft": cleaned}
