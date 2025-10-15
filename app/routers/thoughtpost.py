@@ -173,7 +173,6 @@ Return only the post body exactly as it should appear.
 
 # ---------- OpenAI primary ----------
 async def _call_openai(prompt: str) -> str:
-    max_tokens = int(req.max_words * 1.5)  # allow some buffer (words → tokens roughly 1:1.3)
     resp = await oai_client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
@@ -181,7 +180,7 @@ async def _call_openai(prompt: str) -> str:
             {"role": "user", "content": prompt},
         ],
         temperature=0.4,
-        max_tokens=max_tokens,  # was 300 — allow longer outputs
+        max_tokens=1000
     )
     return (resp.choices[0].message.content or "").strip()
     
