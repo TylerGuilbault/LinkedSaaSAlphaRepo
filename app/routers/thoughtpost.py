@@ -150,7 +150,7 @@ def _build_prompt(
         emoji_hint = "Include exactly 3 tasteful emojis: one in each bullet + one elsewhere naturally."
 
     prompt = f"""
-You are a seasoned LinkedIn thought leader. Write a natural, engaging post for professionals based on the ARTICLE below.
+You are a seasoned LinkedIn thought leader. Write a natural, engaging post for professionals based on the ARTICLE below. Use exactly 2 bullet points (•). If use_emojis is true, **you must include exactly 3 emojis total: one emoji inside each bullet point, and one emoji in the intro or reflective question. Do not omit those emojis**.
 
 ARTICLE:
 {src_title}
@@ -158,12 +158,10 @@ ARTICLE:
 
 Write it like a human:
 - Use short paragraphs with blank lines between them (no walls of text).
-- {emoji_hint}
-- Use exactly 2 bullet points (•).
 - End with one reflective question on its own line.
 - Add 1–4 tasteful hashtags at the end (#Leadership etc.), not “hashtag#”.
 - Do NOT include any URLs (the system attaches the link preview).
-- Stay under {max_words} words: try to use as close to that as possible without going over.
+- Hit exactly {max_words} words or within 2-3 words of that value.
 - Tone: {tone}. Angle: {angle_key or "general"} — {angle_hint}
 
 Return only the post body exactly as it should appear.
