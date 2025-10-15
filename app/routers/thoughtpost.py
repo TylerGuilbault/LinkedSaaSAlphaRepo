@@ -163,7 +163,7 @@ Write it like a human:
 - End with one reflective question on its own line.
 - Add 1–4 tasteful hashtags at the end (#Leadership etc.), not “hashtag#”.
 - Do NOT include any URLs (the system attaches the link preview).
-- Stay under {max_words} words.
+- Get close to {max_words} words.
 - Tone: {tone}. Angle: {angle_key or "general"} — {angle_hint}
 
 Return only the post body exactly as it should appear.
@@ -179,8 +179,8 @@ async def _call_openai(prompt: str) -> str:
             {"role": "system", "content": "You are a professional LinkedIn content strategist."},
             {"role": "user", "content": prompt},
         ],
-        temperature=0.4,
-        max_tokens=700,  # was 300 — allow longer outputs
+        temperature=0.3,
+        max_tokens=1000,  # was 300 — allow longer outputs
     )
     return (resp.choices[0].message.content or "").strip()
 
@@ -432,6 +432,10 @@ def _normalize_linkedin_markup(text: str) -> str:
     t = re.sub(r"\*\*(.*?)\*\*", r"\1", t)   # **bold**
     t = re.sub(r"\*(.*?)\*", r"\1", t)       # *italic*
     t = re.sub(r"_(.*?)_", r"\1", t)         # _italic_
+    # Remove any leftover `**` or `*` markers
+    t = t.replace("**", "")
+    t = t.replace("*", "")
+
 
     # 2) Convert numeric lists at line start to dash bullets
     #    "1. Foo" -> "– Foo"
