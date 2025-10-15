@@ -2,7 +2,8 @@
 import secrets
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import os
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,10 @@ import app.services.linkedin_api as linkedin_api
 from app.db import crud_tokens
 from app.db import token_crypto
 from app.db.models import User
+
+ENABLE_OAUTH_LOGIN = os.getenv("ENABLE_OAUTH_LOGIN", "false").lower() == "true"
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://tylerguilbault.github.io/LinkedinSaaSfrontend")
+
 
 # NEW: decode helper
 from app.auth.oidc import decode_linkedin_id_token
@@ -43,6 +48,7 @@ def login() -> RedirectResponse:
 
 @router.get("/callback")
 def callback(
+    request: Request,  # <-- added
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None,
@@ -107,6 +113,14 @@ def callback(
         except Exception:
             print("Failed to persist member_id on user", flush=True)
 
+    # -------- NEW: gated session + redirect --------
+    if ENABLE_OAUTH_LOGIN:
+        # store only a non-sensitive identifier in the session cookie
+        request.session["user_id"] = str(user.id)
+        # send user back to your GH Pages frontend
+        return RedirectResponse(url=f"{FRONTEND_URL}#logged-in", status_code=302)
+
+    # -------- Original JSON response (unchanged when flag is OFF) --------
     return {
         "status": "ok",
         "user_id": user.id,
@@ -114,6 +128,28 @@ def callback(
         "has_id_token": bool(id_token),
         "member_id": member_id or None,
     }
+
+@router.get("/session/me")
+async def session_me(request: Request):
+    """
+    Authenticated 'who am I' endpoint for the frontend.
+    Separate from the existing /auth/linkedin/me (your config/probe).
+    """
+    if not ENABLE_OAUTH_LOGIN:
+        return {"authenticated": False}
+
+    uid = request.session.get("user_id")
+    if not uid:
+        return {"authenticated": False}
+
+    # If you have a quick user fetch helper, use it; otherwise just return id.
+    return {"authenticated": True, "user": {"id": uid}}
+
+@router.post("/logout")
+async def session_logout(request: Request):
+    if ENABLE_OAUTH_LOGIN:
+        request.session.clear()
+    return {"ok": True}
 
 # Debug helper: show decoded id_token.sub instead of userinfo
 @router.get("/debug/whoami")
