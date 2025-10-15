@@ -8,6 +8,7 @@ psycopg2-binary==2.9.9
 pydantic==2.9.2
 apscheduler==3.10.4
 cryptography==43.0.1
+itsdangerous
 
 pydantic-settings==2.5.2
 
