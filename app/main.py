@@ -16,15 +16,15 @@ app = FastAPI(title="LinkedIn SaaS API", version="0.5.0")
 ENABLE_OAUTH_LOGIN = os.getenv("ENABLE_OAUTH_LOGIN", "false").lower() == "true"
 
 # ---- CORS (must be BEFORE routes mount) ----
-allowed_origins_env = os.environ.get("ALLOWED_ORIGINS", "")
-ALLOWED_ORIGINS = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
+# IMPORTANT: use a single CORSMiddleware. Credentials allowed only when not wildcard.
+raw_origins = os.getenv("ALLOWED_ORIGINS", "*").strip()
+ALLOWED_ORIGINS = ["*"] if raw_origins == "*" else [o.strip() for o in raw_origins.split(",") if o.strip()]
+USE_CREDENTIALS = (ALLOWED_ORIGINS != ["*"])  # only true when you set a specific origin like https://tylerguilbault.github.io
 
-# If you were previously using wildcard, switch to exact origin for cookies:
-# e.g. ALLOWED_ORIGINS = ["https://tylerguilbault.github.io/LinkedinSaaSfrontend"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS if ALLOWED_ORIGINS else [],
-    allow_credentials=True,   # needed for cookies
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=USE_CREDENTIALS,  # must be True for cookies; False if wildcard
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
@@ -39,17 +39,7 @@ if ENABLE_OAUTH_LOGIN:
         https_only=True       # required for same_site="none"
     )
 
-raw = os.getenv("ALLOWED_ORIGINS", "*")
-allowed_origins = ["*"] if raw.strip() == "*" else [o.strip() for o in raw.split(",") if o.strip()]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=False,   # keep False when using "*"
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+print("CORS config ->", {"ALLOWED_ORIGINS": ALLOWED_ORIGINS, "allow_credentials": USE_CREDENTIALS})
 print("MOUNTING ROUTERS… main.py at runtime is:", __file__)
 
 
